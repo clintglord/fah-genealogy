@@ -116,23 +116,41 @@ class FAH_Gene_Plugin {
     }
 
     /**
-     * Register meta boxes for Person details.
+     * Register meta boxes for Person details, Events, and Relationships.
      */
     public static function register_person_meta_boxes() {
         add_meta_box(
             'fah_person_core_details',
             __( 'Person Details', 'fah-genealogy' ),
-            array( __CLASS__, 'render_person_meta_box' ),
+            array( __CLASS__, 'render_person_details_meta_box' ),
             'gene_person',
             'normal',
             'high'
+        );
+
+        add_meta_box(
+            'fah_person_events',
+            __( 'Events / Facts', 'fah-genealogy' ),
+            array( __CLASS__, 'render_person_events_meta_box' ),
+            'gene_person',
+            'normal',
+            'default'
+        );
+
+        add_meta_box(
+            'fah_person_relationships',
+            __( 'Family Links', 'fah-genealogy' ),
+            array( __CLASS__, 'render_person_relationships_meta_box' ),
+            'gene_person',
+            'side',
+            'default'
         );
     }
 
     /**
      * Render the Person Details meta box.
      */
-    public static function render_person_meta_box( $post ) {
+    public static function render_person_details_meta_box( $post ) {
         wp_nonce_field( 'fah_save_person_meta', 'fah_person_meta_nonce' );
 
         $given_names = get_post_meta( $post->ID, '_fah_given_names', true );
@@ -220,7 +238,199 @@ class FAH_Gene_Plugin {
     }
 
     /**
-     * Save Person meta and keep title/slug in sync.
+     * Render Events / Facts meta box.
+     */
+    public static function render_person_events_meta_box( $post ) {
+        $events      = FAH_Gene_Events::get_events_for_person( $post->ID );
+        $event_types = FAH_Gene_Events::get_event_types();
+
+        ?>
+        <p><em><?php esc_html_e( 'Add life events and facts for this person. These will later drive timelines and reports.', 'fah-genealogy' ); ?></em></p>
+
+        <table class="widefat striped" id="fah-events-table">
+            <thead>
+            <tr>
+                <th><?php esc_html_e( 'Type', 'fah-genealogy' ); ?></th>
+                <th><?php esc_html_e( 'Date (text)', 'fah-genealogy' ); ?></th>
+                <th><?php esc_html_e( 'Place', 'fah-genealogy' ); ?></th>
+                <th><?php esc_html_e( 'Description / Notes', 'fah-genealogy' ); ?></th>
+            </tr>
+            </thead>
+            <tbody>
+            <?php
+            if ( ! empty( $events ) ) :
+                foreach ( $events as $index => $event ) :
+                    ?>
+                    <tr>
+                        <td>
+                            <select name="fah_events[<?php echo esc_attr( $index ); ?>][event_type]">
+                                <?php foreach ( $event_types as $key => $label ) : ?>
+                                    <option value="<?php echo esc_attr( $key ); ?>" <?php selected( $event['event_type'], $key ); ?>>
+                                        <?php echo esc_html( $label ); ?>
+                                    </option>
+                                <?php endforeach; ?>
+                            </select>
+                        </td>
+                        <td>
+                            <input type="text"
+                                   name="fah_events[<?php echo esc_attr( $index ); ?>][date_text]"
+                                   value="<?php echo esc_attr( $event['date_text'] ); ?>"
+                                   class="regular-text" />
+                        </td>
+                        <td>
+                            <input type="text"
+                                   name="fah_events[<?php echo esc_attr( $index ); ?>][place]"
+                                   value="<?php echo esc_attr( $event['place'] ); ?>"
+                                   class="regular-text" />
+                        </td>
+                        <td>
+                            <textarea name="fah_events[<?php echo esc_attr( $index ); ?>][description]" rows="2" class="large-text"><?php echo esc_textarea( $event['description'] ); ?></textarea>
+                        </td>
+                    </tr>
+                    <?php
+                endforeach;
+            endif;
+            ?>
+            <!-- Empty template row for adding new events -->
+            <tr class="fah-event-empty-row">
+                <td>
+                    <select name="fah_events[new_index][event_type]">
+                        <?php foreach ( $event_types as $key => $label ) : ?>
+                            <option value="<?php echo esc_attr( $key ); ?>">
+                                <?php echo esc_html( $label ); ?>
+                            </option>
+                        <?php endforeach; ?>
+                    </select>
+                </td>
+                <td><input type="text" name="fah_events[new_index][date_text]" class="regular-text" /></td>
+                <td><input type="text" name="fah_events[new_index][place]" class="regular-text" /></td>
+                <td><textarea name="fah_events[new_index][description]" rows="2" class="large-text"></textarea></td>
+            </tr>
+            </tbody>
+        </table>
+
+        <p>
+            <button type="button" class="button" id="fah-add-event-row">
+                <?php esc_html_e( 'Add another event', 'fah-genealogy' ); ?>
+            </button>
+        </p>
+
+        <script>
+            (function() {
+                document.addEventListener('DOMContentLoaded', function() {
+                    var table = document.getElementById('fah-events-table');
+                    if (!table) return;
+
+                    var addButton = document.getElementById('fah-add-event-row');
+                    if (!addButton) return;
+
+                    var emptyRow = table.querySelector('tr.fah-event-empty-row');
+                    if (!emptyRow) return;
+
+                    var tbody = table.querySelector('tbody');
+                    var rowIndex = <?php echo ! empty( $events ) ? (int) count( $events ) : 0; ?>;
+
+                    addButton.addEventListener('click', function() {
+                        var clone = emptyRow.cloneNode(true);
+                        clone.classList.remove('fah-event-empty-row');
+
+                        var html = clone.innerHTML.replace(/new_index/g, rowIndex);
+                        clone.innerHTML = html;
+
+                        tbody.appendChild(clone);
+                        rowIndex++;
+                    });
+                });
+            })();
+        </script>
+        <?php
+    }
+
+    /**
+     * Render Family Links meta box (father, mother, spouse).
+     */
+    public static function render_person_relationships_meta_box( $post ) {
+        $father_id = FAH_Gene_Relationships::get_single_related( $post->ID, 'father' );
+        $mother_id = FAH_Gene_Relationships::get_single_related( $post->ID, 'mother' );
+        $spouse_id = FAH_Gene_Relationships::get_single_related( $post->ID, 'spouse' );
+
+        $people = get_posts(
+            array(
+                'post_type'      => 'gene_person',
+                'posts_per_page' => -1,
+                'post_status'    => 'publish',
+                'orderby'        => 'title',
+                'order'          => 'ASC',
+                'fields'         => 'ids',
+            )
+        );
+
+        // Build a simple id => title map.
+        $person_options = array();
+        if ( $people ) {
+            foreach ( $people as $person_id ) {
+                if ( (int) $person_id === (int) $post->ID ) {
+                    continue; // Don't show self.
+                }
+                $person_options[ $person_id ] = get_the_title( $person_id );
+            }
+        }
+
+        ?>
+        <p><em><?php esc_html_e( 'Link this person to their close family members. More complex relationships will come later.', 'fah-genealogy' ); ?></em></p>
+
+        <p>
+            <label for="fah_father_id"><strong><?php esc_html_e( 'Father', 'fah-genealogy' ); ?></strong></label><br/>
+            <select name="fah_father_id" id="fah_father_id" class="widefat">
+                <option value=""><?php esc_html_e( '— Select person —', 'fah-genealogy' ); ?></option>
+                <?php
+                foreach ( $person_options as $id => $name ) :
+                    ?>
+                    <option value="<?php echo esc_attr( $id ); ?>" <?php selected( $father_id, $id ); ?>>
+                        <?php echo esc_html( $name ); ?>
+                    </option>
+                    <?php
+                endforeach;
+                ?>
+            </select>
+        </p>
+
+        <p>
+            <label for="fah_mother_id"><strong><?php esc_html_e( 'Mother', 'fah-genealogy' ); ?></strong></label><br/>
+            <select name="fah_mother_id" id="fah_mother_id" class="widefat">
+                <option value=""><?php esc_html_e( '— Select person —', 'fah-genealogy' ); ?></option>
+                <?php
+                foreach ( $person_options as $id => $name ) :
+                    ?>
+                    <option value="<?php echo esc_attr( $id ); ?>" <?php selected( $mother_id, $id ); ?>>
+                        <?php echo esc_html( $name ); ?>
+                    </option>
+                    <?php
+                endforeach;
+                ?>
+            </select>
+        </p>
+
+        <p>
+            <label for="fah_spouse_id"><strong><?php esc_html_e( 'Spouse / Partner', 'fah-genealogy' ); ?></strong></label><br/>
+            <select name="fah_spouse_id" id="fah_spouse_id" class="widefat">
+                <option value=""><?php esc_html_e( '— Select person —', 'fah-genealogy' ); ?></option>
+                <?php
+                foreach ( $person_options as $id => $name ) :
+                    ?>
+                    <option value="<?php echo esc_attr( $id ); ?>" <?php selected( $spouse_id, $id ); ?>>
+                        <?php echo esc_html( $name ); ?>
+                    </option>
+                    <?php
+                endforeach;
+                ?>
+            </select>
+        </p>
+        <?php
+    }
+
+    /**
+     * Save Person meta, events and relationships, keep title/slug in sync.
      */
     public static function save_person_meta( $post_id, $post ) {
         if ( ! isset( $_POST['fah_person_meta_nonce'] ) || ! wp_verify_nonce( $_POST['fah_person_meta_nonce'], 'fah_save_person_meta' ) ) {
@@ -243,6 +453,7 @@ class FAH_Gene_Plugin {
             return;
         }
 
+        // Core person fields.
         $given_names = isset( $_POST['fah_given_names'] ) ? sanitize_text_field( wp_unslash( $_POST['fah_given_names'] ) ) : '';
         $surname     = isset( $_POST['fah_surname'] ) ? sanitize_text_field( wp_unslash( $_POST['fah_surname'] ) ) : '';
         $gender      = isset( $_POST['fah_gender'] ) ? sanitize_text_field( wp_unslash( $_POST['fah_gender'] ) ) : '';
@@ -267,6 +478,18 @@ class FAH_Gene_Plugin {
             update_post_meta( $post_id, $meta_key, $value );
         }
 
+        // Events.
+        $events = isset( $_POST['fah_events'] ) && is_array( $_POST['fah_events'] ) ? $_POST['fah_events'] : array();
+        FAH_Gene_Events::replace_events_for_person( $post_id, $events );
+
+        // Relationships (father, mother, spouse).
+        $father_id = isset( $_POST['fah_father_id'] ) ? (int) $_POST['fah_father_id'] : 0;
+        $mother_id = isset( $_POST['fah_mother_id'] ) ? (int) $_POST['fah_mother_id'] : 0;
+        $spouse_id = isset( $_POST['fah_spouse_id'] ) ? (int) $_POST['fah_spouse_id'] : 0;
+
+        FAH_Gene_Relationships::set_core_family_links( $post_id, $father_id, $mother_id, $spouse_id );
+
+        // Keep title/slug in sync.
         $full_name = trim( $given_names . ' ' . $surname );
 
         if ( ! empty( $full_name ) && $post->post_title !== $full_name ) {

@@ -3,7 +3,7 @@
  * Plugin Name: Family Archive Hub – Genealogy Engine
  * Plugin URI: https://familyarchivehub.com/
  * Description: Core genealogy engine for Family Archive Hub – people, events, relationships, and future GEDCOM import.
- * Version: 0.1.0
+ * Version: 0.2.0
  * Author: Clinton / FAH
  * Text Domain: fah-genealogy
  */
@@ -15,7 +15,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 /**
  * Basic constants
  */
-define( 'FAH_GENEALOGY_VERSION', '0.1.0' );
+define( 'FAH_GENEALOGY_VERSION', '0.2.0' );
 define( 'FAH_GENEALOGY_DB_VERSION', '1' );
 define( 'FAH_GENEALOGY_PLUGIN_FILE', __FILE__ );
 define( 'FAH_GENEALOGY_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
@@ -25,6 +25,8 @@ define( 'FAH_GENEALOGY_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
  * Includes
  */
 require_once FAH_GENEALOGY_PLUGIN_DIR . 'includes/class-fah-gene-db.php';
+require_once FAH_GENEALOGY_PLUGIN_DIR . 'includes/class-fah-gene-events.php';
+require_once FAH_GENEALOGY_PLUGIN_DIR . 'includes/class-fah-gene-relationships.php';
 require_once FAH_GENEALOGY_PLUGIN_DIR . 'includes/class-fah-gene-plugin.php';
 
 /**
