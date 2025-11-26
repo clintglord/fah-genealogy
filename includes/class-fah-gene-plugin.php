@@ -63,7 +63,7 @@ class FAH_Gene_Plugin {
      */
     public static function person_title_placeholder( $title, $post ) {
         if ( $post->post_type === 'gene_person' ) {
-            return __( 'Full name (e.g. Clinton Gregory Lord)', 'fah-genealogy' );
+            return __( 'Full name (e.g. John Michael Smith))', 'fah-genealogy' );
         }
         return $title;
     }
@@ -188,6 +188,11 @@ class FAH_Gene_Plugin {
             return;
         }
 
+        // Revisions? bail.
+        if ( wp_is_post_revision( $post_id ) ) {
+            return;
+        }
+
         // Check user capability.
         if ( ! current_user_can( 'edit_post', $post_id ) ) {
             return;
@@ -198,20 +203,46 @@ class FAH_Gene_Plugin {
             return;
         }
 
+        $given_names   = isset( $_POST['fah_given_names'] ) ? sanitize_text_field( wp_unslash( $_POST['fah_given_names'] ) ) : '';
+        $surname       = isset( $_POST['fah_surname'] ) ? sanitize_text_field( wp_unslash( $_POST['fah_surname'] ) ) : '';
+        $gender        = isset( $_POST['fah_gender'] ) ? sanitize_text_field( wp_unslash( $_POST['fah_gender'] ) ) : '';
+        $birth_date    = isset( $_POST['fah_birth_date'] ) ? sanitize_text_field( wp_unslash( $_POST['fah_birth_date'] ) ) : '';
+        $birth_place   = isset( $_POST['fah_birth_place'] ) ? sanitize_text_field( wp_unslash( $_POST['fah_birth_place'] ) ) : '';
+        $death_date    = isset( $_POST['fah_death_date'] ) ? sanitize_text_field( wp_unslash( $_POST['fah_death_date'] ) ) : '';
+        $death_place   = isset( $_POST['fah_death_place'] ) ? sanitize_text_field( wp_unslash( $_POST['fah_death_place'] ) ) : '';
+        $is_living     = isset( $_POST['fah_is_living'] ) ? '1' : '0';
+
         $fields = array(
-            '_fah_given_names' => isset( $_POST['fah_given_names'] ) ? sanitize_text_field( wp_unslash( $_POST['fah_given_names'] ) ) : '',
-            '_fah_surname'     => isset( $_POST['fah_surname'] ) ? sanitize_text_field( wp_unslash( $_POST['fah_surname'] ) ) : '',
-            '_fah_gender'      => isset( $_POST['fah_gender'] ) ? sanitize_text_field( wp_unslash( $_POST['fah_gender'] ) ) : '',
-            '_fah_birth_date'  => isset( $_POST['fah_birth_date'] ) ? sanitize_text_field( wp_unslash( $_POST['fah_birth_date'] ) ) : '',
-            '_fah_birth_place' => isset( $_POST['fah_birth_place'] ) ? sanitize_text_field( wp_unslash( $_POST['fah_birth_place'] ) ) : '',
-            '_fah_death_date'  => isset( $_POST['fah_death_date'] ) ? sanitize_text_field( wp_unslash( $_POST['fah_death_date'] ) ) : '',
-            '_fah_death_place' => isset( $_POST['fah_death_place'] ) ? sanitize_text_field( wp_unslash( $_POST['fah_death_place'] ) ) : '',
-            '_fah_is_living'   => isset( $_POST['fah_is_living'] ) ? '1' : '0',
+            '_fah_given_names' => $given_names,
+            '_fah_surname'     => $surname,
+            '_fah_gender'      => $gender,
+            '_fah_birth_date'  => $birth_date,
+            '_fah_birth_place' => $birth_place,
+            '_fah_death_date'  => $death_date,
+            '_fah_death_place' => $death_place,
+            '_fah_is_living'   => $is_living,
         );
 
         foreach ( $fields as $meta_key => $value ) {
             update_post_meta( $post_id, $meta_key, $value );
         }
-    }
-}
 
+        // Auto-set the post title from Given names + Surname.
+        $full_name = trim( $given_names . ' ' . $surname );
+
+        if ( ! empty( $full_name ) ) {
+            // Only update if title is empty or different, to avoid infinite loops.
+            if ( $post->post_title !== $full_name ) {
+                remove_action( 'save_post_gene_person', array( __CLASS__, 'save_person_meta' ), 10 );
+                wp_update_post(
+                    array(
+                        'ID'         => $post_id,
+                        'post_title' => $full_name,
+                        // Optional: update slug too, based on full name.
+                        'post_name'  => sanitize_title( $full_name ),
+                    )
+                );
+                add_action( 'save_post_gene_person', array( __CLASS__, 'save_person_meta' ), 10, 2 );
+            }
+        }
+    }
