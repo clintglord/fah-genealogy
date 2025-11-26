@@ -19,6 +19,7 @@ class FAH_Gene_Plugin {
             add_action( 'save_post_gene_person', array( __CLASS__, 'save_person_meta' ), 10, 2 );
             add_filter( 'enter_title_here', array( __CLASS__, 'person_title_placeholder' ), 10, 2 );
             add_filter( 'wp_insert_post_data', array( __CLASS__, 'auto_title_on_insert' ), 10, 2 );
+            add_action( 'admin_enqueue_scripts', array( __CLASS__, 'enqueue_admin_assets' ) );
         }
     }
 
@@ -68,19 +69,17 @@ class FAH_Gene_Plugin {
     }
 
     /**
-     * Auto-set title at insert time if it's empty, so Gutenberg doesn't complain.
+     * Auto-set title at insert time (server-side safety net).
      */
     public static function auto_title_on_insert( $data, $postarr ) {
         if ( $data['post_type'] !== 'gene_person' ) {
             return $data;
         }
 
-        // If title already set, leave it alone.
         if ( ! empty( $data['post_title'] ) ) {
             return $data;
         }
 
-        // Try to build from submitted meta fields.
         $given_names = isset( $_POST['fah_given_names'] )
             ? sanitize_text_field( wp_unslash( $_POST['fah_given_names'] ) )
             : '';
@@ -96,6 +95,24 @@ class FAH_Gene_Plugin {
         }
 
         return $data;
+    }
+
+    /**
+     * Enqueue admin assets (JS to sync title from meta fields).
+     */
+    public static function enqueue_admin_assets() {
+        $screen = get_current_screen();
+        if ( ! $screen || $screen->post_type !== 'gene_person' ) {
+            return;
+        }
+
+        wp_enqueue_script(
+            'fah-gene-person-title-sync',
+            FAH_GENEALOGY_PLUGIN_URL . 'assets/js/fah-person-title-sync.js',
+            array( 'wp-data', 'wp-edit-post' ),
+            FAH_GENEALOGY_VERSION,
+            true
+        );
     }
 
     /**
@@ -116,7 +133,6 @@ class FAH_Gene_Plugin {
      * Render the Person Details meta box.
      */
     public static function render_person_meta_box( $post ) {
-        // Security nonce.
         wp_nonce_field( 'fah_save_person_meta', 'fah_person_meta_nonce' );
 
         $given_names = get_post_meta( $post->ID, '_fah_given_names', true );
@@ -204,30 +220,25 @@ class FAH_Gene_Plugin {
     }
 
     /**
-     * Save Person meta from the meta box and ensure title stays in sync.
+     * Save Person meta and keep title/slug in sync.
      */
     public static function save_person_meta( $post_id, $post ) {
-        // Check nonce.
         if ( ! isset( $_POST['fah_person_meta_nonce'] ) || ! wp_verify_nonce( $_POST['fah_person_meta_nonce'], 'fah_save_person_meta' ) ) {
             return;
         }
 
-        // Autosave? bail.
         if ( defined( 'DOING_AUTOSAVE' ) && DOING_AUTOSAVE ) {
             return;
         }
 
-        // Revisions? bail.
         if ( wp_is_post_revision( $post_id ) ) {
             return;
         }
 
-        // Check user capability.
         if ( ! current_user_can( 'edit_post', $post_id ) ) {
             return;
         }
 
-        // Only for our CPT.
         if ( $post->post_type !== 'gene_person' ) {
             return;
         }
@@ -256,7 +267,6 @@ class FAH_Gene_Plugin {
             update_post_meta( $post_id, $meta_key, $value );
         }
 
-        // Keep title/slug in sync in case meta was changed after first save.
         $full_name = trim( $given_names . ' ' . $surname );
 
         if ( ! empty( $full_name ) && $post->post_title !== $full_name ) {
