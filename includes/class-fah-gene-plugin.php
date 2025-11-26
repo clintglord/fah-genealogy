@@ -14,8 +14,9 @@ class FAH_Gene_Plugin {
     public static function init() {
         add_action( 'init', array( __CLASS__, 'register_person_cpt' ) );
 
-        // Front-end content for Person CPT.
+        // Front-end content + styles for Person CPT.
         add_filter( 'the_content', array( __CLASS__, 'filter_person_content' ) );
+        add_action( 'wp_enqueue_scripts', array( __CLASS__, 'enqueue_front_assets' ) );
 
         if ( is_admin() ) {
             add_action( 'add_meta_boxes', array( __CLASS__, 'register_person_meta_boxes' ) );
@@ -115,6 +116,22 @@ class FAH_Gene_Plugin {
             array( 'wp-data', 'wp-edit-post' ),
             FAH_GENEALOGY_VERSION,
             true
+        );
+    }
+
+    /**
+     * Front-end styles for Person pages.
+     */
+    public static function enqueue_front_assets() {
+        if ( ! is_singular( 'gene_person' ) ) {
+            return;
+        }
+
+        wp_enqueue_style(
+            'fah-gene-person',
+            FAH_GENEALOGY_PLUGIN_URL . 'assets/css/fah-genealogy.css',
+            array(),
+            FAH_GENEALOGY_VERSION
         );
     }
 
