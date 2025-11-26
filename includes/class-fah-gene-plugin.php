@@ -259,13 +259,23 @@ class FAH_Gene_Plugin {
 
     /**
      * Render Events / Facts meta box.
+     * NOTE: Birth/Death are handled from Person Details, so we exclude them here.
      */
     public static function render_person_events_meta_box( $post ) {
         $events      = FAH_Gene_Events::get_events_for_person( $post->ID );
         $event_types = FAH_Gene_Events::get_event_types();
 
+        // Don't show Birth / Death in the events UI – those come from the core fields above.
+        $events = array_filter(
+            $events,
+            function( $e ) {
+                return ! in_array( $e['event_type'], array( 'birth', 'death' ), true );
+            }
+        );
+        unset( $event_types['birth'], $event_types['death'] );
+
         ?>
-        <p><em><?php esc_html_e( 'Add life events and facts for this person. These will later drive timelines and reports.', 'fah-genealogy' ); ?></em></p>
+        <p><em><?php esc_html_e( 'Add other life events and facts for this person. Birth and death are managed in the Person Details section above.', 'fah-genealogy' ); ?></em></p>
 
         <table class="widefat striped" id="fah-events-table">
             <thead>
@@ -617,7 +627,7 @@ class FAH_Gene_Plugin {
 
         $details_html .= '</dl>';
 
-        // Events table.
+        // Events table (exclude birth/death – already shown above).
         if ( ! empty( $events ) ) {
             $details_html .= '<h2>' . esc_html__( 'Events & facts', 'fah-genealogy' ) . '</h2>';
             $details_html .= '<table class="fah-person-events">';
@@ -631,6 +641,11 @@ class FAH_Gene_Plugin {
             $event_types = FAH_Gene_Events::get_event_types();
 
             foreach ( $events as $event ) {
+                // Birth / death already shown in the Person summary block.
+                if ( in_array( $event['event_type'], array( 'birth', 'death' ), true ) ) {
+                    continue;
+                }
+
                 $label = isset( $event_types[ $event['event_type'] ] ) ? $event_types[ $event['event_type'] ] : $event['event_type'];
 
                 $details_html .= '<tr>';
