@@ -1,0 +1,71 @@
+/* Basic layout for person view */
+.single-gene_person .fah-person-summary {
+    margin-top: 2rem;
+    margin-bottom: 3rem;
+    padding: 1.5rem 0;
+    border-top: 1px solid rgba(0,0,0,0.06);
+    border-bottom: 1px solid rgba(0,0,0,0.06);
+}
+
+/* Person summary heading a bit smaller than the page title */
+.single-gene_person .fah-person-summary h2 {
+    font-size: 1.6rem;
+    margin-bottom: 1rem;
+}
+
+/* Definition list in two columns on larger screens */
+.single-gene_person .fah-person-details {
+    margin: 0;
+    display: grid;
+    grid-template-columns: minmax(120px, 180px) 1fr;
+    row-gap: 0.35rem;
+    column-gap: 1.25rem;
+    padding: 0;
+}
+
+.single-gene_person .fah-person-details dt {
+    font-weight: 600;
+    margin: 0;
+}
+
+.single-gene_person .fah-person-details dd {
+    margin: 0;
+}
+
+/* Events table */
+.single-gene_person .fah-person-events {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 1.5rem;
+    font-size: 0.95rem;
+}
+
+.single-gene_person .fah-person-events th,
+.single-gene_person .fah-person-events td {
+    padding: 0.5rem 0.75rem;
+    border-bottom: 1px solid rgba(0,0,0,0.06);
+    text-align: left;
+}
+
+.single-gene_person .fah-person-events thead th {
+    font-weight: 600;
+}
+
+/* Slight striping for readability */
+.single-gene_person .fah-person-events tbody tr:nth-child(even) {
+    background: rgba(0,0,0,0.015);
+}
+
+/* Optional: hide default post meta like “Written by …” if your theme uses it */
+.single-gene_person .entry-meta,
+.single-gene_person .wp-block-post-author,
+.single-gene_person .wp-block-post-date {
+    display: none;
+}
+
+/* Mobile tweaks */
+@media (max-width: 600px) {
+    .single-gene_person .fah-person-details {
+        grid-template-columns: 1fr;
+    }
+}
