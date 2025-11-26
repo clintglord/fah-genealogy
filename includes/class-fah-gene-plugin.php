@@ -18,13 +18,12 @@ class FAH_Gene_Plugin {
             add_action( 'add_meta_boxes', array( __CLASS__, 'register_person_meta_boxes' ) );
             add_action( 'save_post_gene_person', array( __CLASS__, 'save_person_meta' ), 10, 2 );
             add_filter( 'enter_title_here', array( __CLASS__, 'person_title_placeholder' ), 10, 2 );
+            add_filter( 'wp_insert_post_data', array( __CLASS__, 'auto_title_on_insert' ), 10, 2 );
         }
     }
 
     /**
      * Register the Person custom post type.
-     *
-     * This is the basic entity representing one individual.
      */
     public static function register_person_cpt() {
         $labels = array(
@@ -69,6 +68,37 @@ class FAH_Gene_Plugin {
     }
 
     /**
+     * Auto-set title at insert time if it's empty, so Gutenberg doesn't complain.
+     */
+    public static function auto_title_on_insert( $data, $postarr ) {
+        if ( $data['post_type'] !== 'gene_person' ) {
+            return $data;
+        }
+
+        // If title already set, leave it alone.
+        if ( ! empty( $data['post_title'] ) ) {
+            return $data;
+        }
+
+        // Try to build from submitted meta fields.
+        $given_names = isset( $_POST['fah_given_names'] )
+            ? sanitize_text_field( wp_unslash( $_POST['fah_given_names'] ) )
+            : '';
+        $surname     = isset( $_POST['fah_surname'] )
+            ? sanitize_text_field( wp_unslash( $_POST['fah_surname'] ) )
+            : '';
+
+        $full_name = trim( $given_names . ' ' . $surname );
+
+        if ( ! empty( $full_name ) ) {
+            $data['post_title'] = $full_name;
+            $data['post_name']  = sanitize_title( $full_name );
+        }
+
+        return $data;
+    }
+
+    /**
      * Register meta boxes for Person details.
      */
     public static function register_person_meta_boxes() {
@@ -99,7 +129,7 @@ class FAH_Gene_Plugin {
         $is_living   = get_post_meta( $post->ID, '_fah_is_living', true );
         ?>
         <p>
-            <em><?php esc_html_e( 'Use the fields below for structured data. The title field above will automatically use the full name (Given names + Surname).', 'fah-genealogy' ); ?></em>
+            <em><?php esc_html_e( 'Use the fields below for structured data. The title will automatically use the full name (Given names + Surname).', 'fah-genealogy' ); ?></em>
         </p>
 
         <table class="form-table">
@@ -174,7 +204,7 @@ class FAH_Gene_Plugin {
     }
 
     /**
-     * Save Person meta from the meta box and auto-set title.
+     * Save Person meta from the meta box and ensure title stays in sync.
      */
     public static function save_person_meta( $post_id, $post ) {
         // Check nonce.
@@ -226,25 +256,21 @@ class FAH_Gene_Plugin {
             update_post_meta( $post_id, $meta_key, $value );
         }
 
-        // Auto-set the post title (and slug) from Given names + Surname.
+        // Keep title/slug in sync in case meta was changed after first save.
         $full_name = trim( $given_names . ' ' . $surname );
 
-        if ( ! empty( $full_name ) ) {
-            if ( $post->post_title !== $full_name ) {
-                // Avoid infinite loop by temporarily removing this save hook.
-                remove_action( 'save_post_gene_person', array( __CLASS__, 'save_person_meta' ), 10 );
+        if ( ! empty( $full_name ) && $post->post_title !== $full_name ) {
+            remove_action( 'save_post_gene_person', array( __CLASS__, 'save_person_meta' ), 10 );
 
-                wp_update_post(
-                    array(
-                        'ID'         => $post_id,
-                        'post_title' => $full_name,
-                        'post_name'  => sanitize_title( $full_name ),
-                    )
-                );
+            wp_update_post(
+                array(
+                    'ID'         => $post_id,
+                    'post_title' => $full_name,
+                    'post_name'  => sanitize_title( $full_name ),
+                )
+            );
 
-                // Re-attach the save hook.
-                add_action( 'save_post_gene_person', array( __CLASS__, 'save_person_meta' ), 10, 2 );
-            }
+            add_action( 'save_post_gene_person', array( __CLASS__, 'save_person_meta' ), 10, 2 );
         }
     }
 }
