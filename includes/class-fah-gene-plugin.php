@@ -14,6 +14,9 @@ class FAH_Gene_Plugin {
     public static function init() {
         add_action( 'init', array( __CLASS__, 'register_person_cpt' ) );
 
+        // Front-end content for Person CPT.
+        add_filter( 'the_content', array( __CLASS__, 'filter_person_content' ) );
+
         if ( is_admin() ) {
             add_action( 'add_meta_boxes', array( __CLASS__, 'register_person_meta_boxes' ) );
             add_action( 'save_post_gene_person', array( __CLASS__, 'save_person_meta' ), 10, 2 );
@@ -505,5 +508,128 @@ class FAH_Gene_Plugin {
 
             add_action( 'save_post_gene_person', array( __CLASS__, 'save_person_meta' ), 10, 2 );
         }
+    }
+
+    /**
+     * Front-end: inject person summary (details, events, family) into content.
+     *
+     * @param string $content
+     * @return string
+     */
+    public static function filter_person_content( $content ) {
+        if ( ! is_singular( 'gene_person' ) || ! in_the_loop() || ! is_main_query() ) {
+            return $content;
+        }
+
+        $post_id = get_the_ID();
+
+        // Core fields.
+        $given_names = get_post_meta( $post_id, '_fah_given_names', true );
+        $surname     = get_post_meta( $post_id, '_fah_surname', true );
+        $gender      = get_post_meta( $post_id, '_fah_gender', true );
+        $birth_date  = get_post_meta( $post_id, '_fah_birth_date', true );
+        $birth_place = get_post_meta( $post_id, '_fah_birth_place', true );
+        $death_date  = get_post_meta( $post_id, '_fah_death_date', true );
+        $death_place = get_post_meta( $post_id, '_fah_death_place', true );
+        $is_living   = get_post_meta( $post_id, '_fah_is_living', true );
+
+        // Events.
+        $events = FAH_Gene_Events::get_events_for_person( $post_id );
+
+        // Relationships.
+        $father_id = FAH_Gene_Relationships::get_single_related( $post_id, 'father' );
+        $mother_id = FAH_Gene_Relationships::get_single_related( $post_id, 'mother' );
+        $spouse_id = FAH_Gene_Relationships::get_single_related( $post_id, 'spouse' );
+
+        $details_html = '<section class="fah-person-summary">';
+
+        // Person summary.
+        $details_html .= '<h2>' . esc_html__( 'Person summary', 'fah-genealogy' ) . '</h2>';
+        $details_html .= '<dl class="fah-person-details">';
+
+        if ( $given_names || $surname ) {
+            $details_html .= '<dt>' . esc_html__( 'Full name', 'fah-genealogy' ) . '</dt><dd>' . esc_html( trim( $given_names . ' ' . $surname ) ) . '</dd>';
+        }
+
+        if ( $gender ) {
+            $details_html .= '<dt>' . esc_html__( 'Gender', 'fah-genealogy' ) . '</dt><dd>' . esc_html( ucfirst( $gender ) ) . '</dd>';
+        }
+
+        if ( $birth_date || $birth_place ) {
+            $details_html .= '<dt>' . esc_html__( 'Born', 'fah-genealogy' ) . '</dt><dd>';
+            if ( $birth_date ) {
+                $details_html .= esc_html( $birth_date );
+            }
+            if ( $birth_date && $birth_place ) {
+                $details_html .= ' – ';
+            }
+            if ( $birth_place ) {
+                $details_html .= esc_html( $birth_place );
+            }
+            $details_html .= '</dd>';
+        }
+
+        if ( $death_date || $death_place ) {
+            $details_html .= '<dt>' . esc_html__( 'Died', 'fah-genealogy' ) . '</dt><dd>';
+            if ( $death_date ) {
+                $details_html .= esc_html( $death_date );
+            }
+            if ( $death_date && $death_place ) {
+                $details_html .= ' – ';
+            }
+            if ( $death_place ) {
+                $details_html .= esc_html( $death_place );
+            }
+            $details_html .= '</dd>';
+        } elseif ( $is_living ) {
+            $details_html .= '<dt>' . esc_html__( 'Status', 'fah-genealogy' ) . '</dt><dd>' . esc_html__( 'Believed to be living', 'fah-genealogy' ) . '</dd>';
+        }
+
+        // Family links.
+        if ( $father_id || $mother_id || $spouse_id ) {
+            if ( $father_id ) {
+                $details_html .= '<dt>' . esc_html__( 'Father', 'fah-genealogy' ) . '</dt><dd><a href="' . esc_url( get_permalink( $father_id ) ) . '">' . esc_html( get_the_title( $father_id ) ) . '</a></dd>';
+            }
+            if ( $mother_id ) {
+                $details_html .= '<dt>' . esc_html__( 'Mother', 'fah-genealogy' ) . '</dt><dd><a href="' . esc_url( get_permalink( $mother_id ) ) . '">' . esc_html( get_the_title( $mother_id ) ) . '</a></dd>';
+            }
+            if ( $spouse_id ) {
+                $details_html .= '<dt>' . esc_html__( 'Spouse / Partner', 'fah-genealogy' ) . '</dt><dd><a href="' . esc_url( get_permalink( $spouse_id ) ) . '">' . esc_html( get_the_title( $spouse_id ) ) . '</a></dd>';
+            }
+        }
+
+        $details_html .= '</dl>';
+
+        // Events table.
+        if ( ! empty( $events ) ) {
+            $details_html .= '<h2>' . esc_html__( 'Events & facts', 'fah-genealogy' ) . '</h2>';
+            $details_html .= '<table class="fah-person-events">';
+            $details_html .= '<thead><tr>';
+            $details_html .= '<th>' . esc_html__( 'Type', 'fah-genealogy' ) . '</th>';
+            $details_html .= '<th>' . esc_html__( 'Date', 'fah-genealogy' ) . '</th>';
+            $details_html .= '<th>' . esc_html__( 'Place', 'fah-genealogy' ) . '</th>';
+            $details_html .= '<th>' . esc_html__( 'Notes', 'fah-genealogy' ) . '</th>';
+            $details_html .= '</tr></thead><tbody>';
+
+            $event_types = FAH_Gene_Events::get_event_types();
+
+            foreach ( $events as $event ) {
+                $label = isset( $event_types[ $event['event_type'] ] ) ? $event_types[ $event['event_type'] ] : $event['event_type'];
+
+                $details_html .= '<tr>';
+                $details_html .= '<td>' . esc_html( $label ) . '</td>';
+                $details_html .= '<td>' . esc_html( $event['date_text'] ) . '</td>';
+                $details_html .= '<td>' . esc_html( $event['place'] ) . '</td>';
+                $details_html .= '<td>' . esc_html( $event['description'] ) . '</td>';
+                $details_html .= '</tr>';
+            }
+
+            $details_html .= '</tbody></table>';
+        }
+
+        $details_html .= '</section>';
+
+        // Prepend our block above the normal editor content.
+        return $details_html . $content;
     }
 }
