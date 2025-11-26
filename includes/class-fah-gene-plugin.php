@@ -14,7 +14,6 @@ class FAH_Gene_Plugin {
     public static function init() {
         add_action( 'init', array( __CLASS__, 'register_person_cpt' ) );
 
-        // Admin-only hooks.
         if ( is_admin() ) {
             add_action( 'add_meta_boxes', array( __CLASS__, 'register_person_meta_boxes' ) );
             add_action( 'save_post_gene_person', array( __CLASS__, 'save_person_meta' ), 10, 2 );
@@ -62,9 +61,10 @@ class FAH_Gene_Plugin {
      * Change the title placeholder text for Person posts.
      */
     public static function person_title_placeholder( $title, $post ) {
-        if ( $post->post_type === 'gene_person' ) {
-            return __( 'Full name (e.g. John Michael Smith))', 'fah-genealogy' );
+        if ( $post instanceof WP_Post && $post->post_type === 'gene_person' ) {
+            return __( 'Full name (e.g. John Michael Smith)', 'fah-genealogy' );
         }
+
         return $title;
     }
 
@@ -89,18 +89,17 @@ class FAH_Gene_Plugin {
         // Security nonce.
         wp_nonce_field( 'fah_save_person_meta', 'fah_person_meta_nonce' );
 
-        $given_names   = get_post_meta( $post->ID, '_fah_given_names', true );
-        $surname       = get_post_meta( $post->ID, '_fah_surname', true );
-        $gender        = get_post_meta( $post->ID, '_fah_gender', true );
-        $birth_date    = get_post_meta( $post->ID, '_fah_birth_date', true );
-        $birth_place   = get_post_meta( $post->ID, '_fah_birth_place', true );
-        $death_date    = get_post_meta( $post->ID, '_fah_death_date', true );
-        $death_place   = get_post_meta( $post->ID, '_fah_death_place', true );
-        $is_living     = get_post_meta( $post->ID, '_fah_is_living', true );
-
+        $given_names = get_post_meta( $post->ID, '_fah_given_names', true );
+        $surname     = get_post_meta( $post->ID, '_fah_surname', true );
+        $gender      = get_post_meta( $post->ID, '_fah_gender', true );
+        $birth_date  = get_post_meta( $post->ID, '_fah_birth_date', true );
+        $birth_place = get_post_meta( $post->ID, '_fah_birth_place', true );
+        $death_date  = get_post_meta( $post->ID, '_fah_death_date', true );
+        $death_place = get_post_meta( $post->ID, '_fah_death_place', true );
+        $is_living   = get_post_meta( $post->ID, '_fah_is_living', true );
         ?>
         <p>
-            <em><?php esc_html_e( 'Use the fields below for structured data. The title field above should be the full display name.', 'fah-genealogy' ); ?></em>
+            <em><?php esc_html_e( 'Use the fields below for structured data. The title field above will automatically use the full name (Given names + Surname).', 'fah-genealogy' ); ?></em>
         </p>
 
         <table class="form-table">
@@ -175,7 +174,7 @@ class FAH_Gene_Plugin {
     }
 
     /**
-     * Save Person meta from the meta box.
+     * Save Person meta from the meta box and auto-set title.
      */
     public static function save_person_meta( $post_id, $post ) {
         // Check nonce.
@@ -203,14 +202,14 @@ class FAH_Gene_Plugin {
             return;
         }
 
-        $given_names   = isset( $_POST['fah_given_names'] ) ? sanitize_text_field( wp_unslash( $_POST['fah_given_names'] ) ) : '';
-        $surname       = isset( $_POST['fah_surname'] ) ? sanitize_text_field( wp_unslash( $_POST['fah_surname'] ) ) : '';
-        $gender        = isset( $_POST['fah_gender'] ) ? sanitize_text_field( wp_unslash( $_POST['fah_gender'] ) ) : '';
-        $birth_date    = isset( $_POST['fah_birth_date'] ) ? sanitize_text_field( wp_unslash( $_POST['fah_birth_date'] ) ) : '';
-        $birth_place   = isset( $_POST['fah_birth_place'] ) ? sanitize_text_field( wp_unslash( $_POST['fah_birth_place'] ) ) : '';
-        $death_date    = isset( $_POST['fah_death_date'] ) ? sanitize_text_field( wp_unslash( $_POST['fah_death_date'] ) ) : '';
-        $death_place   = isset( $_POST['fah_death_place'] ) ? sanitize_text_field( wp_unslash( $_POST['fah_death_place'] ) ) : '';
-        $is_living     = isset( $_POST['fah_is_living'] ) ? '1' : '0';
+        $given_names = isset( $_POST['fah_given_names'] ) ? sanitize_text_field( wp_unslash( $_POST['fah_given_names'] ) ) : '';
+        $surname     = isset( $_POST['fah_surname'] ) ? sanitize_text_field( wp_unslash( $_POST['fah_surname'] ) ) : '';
+        $gender      = isset( $_POST['fah_gender'] ) ? sanitize_text_field( wp_unslash( $_POST['fah_gender'] ) ) : '';
+        $birth_date  = isset( $_POST['fah_birth_date'] ) ? sanitize_text_field( wp_unslash( $_POST['fah_birth_date'] ) ) : '';
+        $birth_place = isset( $_POST['fah_birth_place'] ) ? sanitize_text_field( wp_unslash( $_POST['fah_birth_place'] ) ) : '';
+        $death_date  = isset( $_POST['fah_death_date'] ) ? sanitize_text_field( wp_unslash( $_POST['fah_death_date'] ) ) : '';
+        $death_place = isset( $_POST['fah_death_place'] ) ? sanitize_text_field( wp_unslash( $_POST['fah_death_place'] ) ) : '';
+        $is_living   = isset( $_POST['fah_is_living'] ) ? '1' : '0';
 
         $fields = array(
             '_fah_given_names' => $given_names,
@@ -227,22 +226,25 @@ class FAH_Gene_Plugin {
             update_post_meta( $post_id, $meta_key, $value );
         }
 
-        // Auto-set the post title from Given names + Surname.
+        // Auto-set the post title (and slug) from Given names + Surname.
         $full_name = trim( $given_names . ' ' . $surname );
 
         if ( ! empty( $full_name ) ) {
-            // Only update if title is empty or different, to avoid infinite loops.
             if ( $post->post_title !== $full_name ) {
+                // Avoid infinite loop by temporarily removing this save hook.
                 remove_action( 'save_post_gene_person', array( __CLASS__, 'save_person_meta' ), 10 );
+
                 wp_update_post(
                     array(
                         'ID'         => $post_id,
                         'post_title' => $full_name,
-                        // Optional: update slug too, based on full name.
                         'post_name'  => sanitize_title( $full_name ),
                     )
                 );
+
+                // Re-attach the save hook.
                 add_action( 'save_post_gene_person', array( __CLASS__, 'save_person_meta' ), 10, 2 );
             }
         }
     }
+}
